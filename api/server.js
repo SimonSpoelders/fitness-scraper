@@ -1,20 +1,31 @@
-// api/server.js - FINAL SIMPLE VERSION
+// api/server.js - FINAL TWO-STEP AUTHENTICATION
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
-// The URL for the website's internal API
+const SCHEDULE_PAGE_URL = 'https://fit.gent/uurrooster/';
 const API_URL = 'https://fit.gent/wp-admin/admin-ajax.php';
 
 export default async function handler(req, res) {
   try {
-    // We need to send a POST request with a specific 'action' payload,
-    // just like the real website does.
-    const response = await axios.post(
+    // --- STEP 1: Fetch the main page to get the security nonce ---
+    const pageResponse = await axios.get(SCHEDULE_PAGE_URL);
+    const pageHtml = pageResponse.data;
+
+    // Use a regular expression to find the nonce in the inline script
+    const nonceMatch = pageHtml.match(/var wcs_ajax_object = .*?"security":"(.*?)"/);
+    if (!nonceMatch || !nonceMatch[1]) {
+      throw new Error('Could not find security nonce on the page.');
+    }
+    const nonce = nonceMatch[1];
+
+    // --- STEP 2: Use the nonce to make the real API call ---
+    const apiResponse = await axios.post(
       API_URL,
       new URLSearchParams({
         action: 'wcs_get_week_html',
         calendar_id: '1',
+        security: nonce, // Include the dynamic security nonce
       }),
       {
         headers: {
@@ -23,9 +34,9 @@ export default async function handler(req, res) {
       }
     );
 
-    // The server responds with JSON that contains the schedule's HTML
-    const html = response.data.data;
-    const $ = cheerio.load(html);
+    // The rest of the logic is the same: parse the HTML from the API response
+    const scheduleHtml = apiResponse.data.data;
+    const $ = cheerio.load(scheduleHtml);
 
     const scrapedSchedule = {};
     const days = [];

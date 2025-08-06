@@ -8,8 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@sparticuz/chromium": "111.0.0",
-    "puppeteer-core": "^19.11.1"
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12"
   },
   "author": "",
   "license": "ISC"

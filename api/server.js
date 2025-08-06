@@ -1,40 +1,34 @@
-// api/server.js - SIMPLIFIED FINAL VERSION
+// api/server.js - FINAL ARCHITECTURE
 
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 export default async function handler(req, res) {
     let browser;
     try {
+        // --- The key change: We configure puppeteer to use our special Chromium package ---
         browser = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
 
         const page = await browser.newPage();
 
-        // We can still block unnecessary resources for speed
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
-                req.abort();
-            } else {
-                req.continue();
-            }
-        });
-
+        // This part of the logic is the same
         await page.goto('https://fit.gent/uurrooster/', { waitUntil: 'domcontentloaded' });
 
-        // The cookie button logic remains important
         const cookieButtonSelector = 'button.cmplz-btn.cmplz-accept';
         try {
             await page.waitForSelector(cookieButtonSelector, { timeout: 3000 });
             await page.click(cookieButtonSelector);
         } catch (e) {
-            console.log("Cookie consent button not found or not needed.");
+            // It's okay if the cookie button isn't found
         }
 
         await page.waitForSelector('table.uurrooster', { timeout: 8000 });
 
-        // The scraping logic is unchanged
         const scheduleData = await page.evaluate(() => {
             const scrapedSchedule = {};
             const days = [];

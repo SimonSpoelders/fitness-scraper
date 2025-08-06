@@ -1,9 +1,1 @@
-{
-  "functions": {
-    "api/server.js": {
-      "memory": 1024
-    }
-  }
-}
-
 

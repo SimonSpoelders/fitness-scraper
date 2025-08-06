@@ -4,9 +4,8 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
-// This is the main function Vercel will run
 export default async function handler(req, res) {
-    console.log("Serverless function invoked.");
+    console.log("Optimized function invoked.");
     let browser;
 
     try {
@@ -14,28 +13,39 @@ export default async function handler(req, res) {
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process'
             ],
         });
-        console.log("Browser launched on Vercel.");
-
+        
         const page = await browser.newPage();
-        await page.goto('https://fit.gent/uurrooster/', { waitUntil: 'networkidle2' });
-        console.log("Navigated to page.");
+
+        // --- NEW: Block unnecessary requests to speed up page load ---
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font', 'script'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
+        await page.goto('https://fit.gent/uurrooster/', { waitUntil: 'domcontentloaded' });
 
         const cookieButtonSelector = 'button.cmplz-btn.cmplz-accept';
         try {
-            await page.waitForSelector(cookieButtonSelector, { timeout: 5000 });
+            // We'll give the cookie button less time to appear
+            await page.waitForSelector(cookieButtonSelector, { timeout: 3000 });
             await page.click(cookieButtonSelector);
-            console.log("Cookie button clicked.");
-            await new Promise(r => setTimeout(r, 2000));
         } catch (e) {
-            console.log("Cookie button not found.");
+            console.log("Cookie consent button not found or not needed.");
         }
-
-        await page.waitForSelector('table.uurrooster', { timeout: 15000 });
-        console.log("Schedule table found.");
+        
+        // --- NEW: Reduced timeout to stay within Vercel's 10-second limit ---
+        await page.waitForSelector('table.uurrooster', { timeout: 8000 }); // 8 seconds
 
         const scheduleData = await page.evaluate(() => {
+            // This scraping logic is already fast, no changes needed here.
             const scrapedSchedule = {};
             const days = [];
             const dayElements = document.querySelectorAll('table.uurrooster thead th');
@@ -59,15 +69,16 @@ export default async function handler(req, res) {
             });
             return scrapedSchedule;
         });
-
-        console.log("Scraping successful.");
-        // Send the data back with caching headers
+        
         res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
         res.status(200).json(scheduleData);
 
     } catch (error) {
-        console.error("CRITICAL ERROR in Vercel function:", error);
-        res.status(500).json({ error: 'Failed to scrape the website.' });
+        console.error("RUNTIME ERROR:", error);
+        res.status(500).json({ 
+            error: 'Failed to scrape the website.',
+            details: error.message 
+        });
     } finally {
         if (browser) await browser.close();
     }

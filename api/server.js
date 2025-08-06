@@ -1,28 +1,17 @@
-// api/server.js - FINAL VERSION
+// api/server.js - SIMPLIFIED FINAL VERSION
 
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-
-// Instantiate the stealth plugin
-const stealth = StealthPlugin();
-// --- THE FIX: Remove the specific evasion that causes the error on Vercel ---
-stealth.enabledEvasions.delete('chrome.app');
-// Use the modified plugin
-puppeteer.use(stealth);
+import puppeteer from 'puppeteer';
 
 export default async function handler(req, res) {
     let browser;
     try {
         browser = await puppeteer.launch({
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-            ],
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
-        
+
         const page = await browser.newPage();
-        
-        // Block unnecessary resources to speed up page load
+
+        // We can still block unnecessary resources for speed
         await page.setRequestInterception(true);
         page.on('request', (req) => {
             if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
@@ -34,6 +23,7 @@ export default async function handler(req, res) {
 
         await page.goto('https://fit.gent/uurrooster/', { waitUntil: 'domcontentloaded' });
 
+        // The cookie button logic remains important
         const cookieButtonSelector = 'button.cmplz-btn.cmplz-accept';
         try {
             await page.waitForSelector(cookieButtonSelector, { timeout: 3000 });
@@ -41,9 +31,10 @@ export default async function handler(req, res) {
         } catch (e) {
             console.log("Cookie consent button not found or not needed.");
         }
-        
+
         await page.waitForSelector('table.uurrooster', { timeout: 8000 });
 
+        // The scraping logic is unchanged
         const scheduleData = await page.evaluate(() => {
             const scrapedSchedule = {};
             const days = [];
@@ -68,8 +59,7 @@ export default async function handler(req, res) {
             });
             return scrapedSchedule;
         });
-        
-        // Send the data back with caching headers
+
         res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
         res.status(200).json(scheduleData);
 
